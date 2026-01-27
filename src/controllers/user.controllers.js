@@ -12,6 +12,29 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const generateAccessAndRefreshToken = async (userId) => {
+ try {
+   const user = await User.findById(userId);
+   if (!user) {
+     throw new ApiError(400, "Invalid Credentials");
+   }
+ 
+   const accessToken = await user.generateAccessToken();
+   const refreshToken = await user.generateRefreshToken();
+ 
+   user.refreshToken = refreshToken;
+   await user.save({ validateBeforeSave: false });
+ 
+   return { accessToken, refreshToken };
+ } catch (error) {
+  console.log("Error in generateAccessAndRefreshToken user controller ------ ",error);
+  throw new ApiError(
+    500,
+    "Something went wrong"
+  );
+ }
+};
+
 const registerUser = asyncHandler(async (req, res) => {
   const { fullname, email, username, password } = req.body || {};
 
