@@ -13,26 +13,26 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const generateAccessAndRefreshToken = async (userId) => {
- try {
-   const user = await User.findById(userId);
-   if (!user) {
-     throw new ApiError(400, "Invalid Credentials");
-   }
- 
-   const accessToken = await user.generateAccessToken();
-   const refreshToken = await user.generateRefreshToken();
- 
-   user.refreshToken = refreshToken;
-   await user.save({ validateBeforeSave: false });
- 
-   return { accessToken, refreshToken };
- } catch (error) {
-  console.log("Error in generateAccessAndRefreshToken user controller ------ ",error);
-  throw new ApiError(
-    500,
-    "Something went wrong"
-  );
- }
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(400, "Invalid Credentials");
+    }
+
+    const accessToken = await user.generateAccessToken();
+    const refreshToken = await user.generateRefreshToken();
+
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+
+    return { accessToken, refreshToken };
+  } catch (error) {
+    console.log(
+      "Error in generateAccessAndRefreshToken user controller ------ ",
+      error
+    );
+    throw new ApiError(500, "Something went wrong");
+  }
 };
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -120,4 +120,61 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 });
 
-export { registerUser };
+const loginUser = asyncHandler(async (req, res) => {
+  const { email, username, password } = req.body || {};
+  if (!email || !password) {
+    throw new ApiError(400, "Email is required");
+  }
+
+  const isUser = await User.findOne({
+    $or: [
+      {
+        email,
+      },
+      {
+        username,
+      },
+    ],
+  });
+
+  if (!isUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const isPasswordMatch = await isUser.isPasswordCorrect(password);
+
+  if (!isPasswordMatch) {
+    throw new ApiError(400, "Invalid credentials");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
+    isUser._id
+  );
+
+  const loggedInUser = await User.findById(isUser._id).select(
+    "-password -refreshToken"
+  );
+
+  if (!loggedInUser) {
+    throw new ApiError(400, "User not logged in");
+  }
+
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        { user: loggedInUser, accessToken, refreshToken },
+        "User logged in successfully"
+      )
+    );
+});
+
+export { registerUser, loginUser };
